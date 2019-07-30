@@ -1,5 +1,7 @@
 package jason.app.gst.tutorial.java;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.ByteBuffer;
 
 import org.freedesktop.gstreamer.Buffer;
@@ -18,7 +20,8 @@ import org.freedesktop.gstreamer.elements.AppSrc;
 
 public class BasicTutorial8 {
 	public static final int CHUNK_SIZE = 1024;
-	public static final int SAMPLE_RATE = 44100;
+	public static final BigDecimal SAMPLE_RATE = new BigDecimal(44100);
+	public static final BigDecimal GST_SECOND = new BigDecimal(1000000000);
 	public static void main(String[] args) {
 		CustomData data = new CustomData();
 		 data.b = 1; /* For waveform generation */
@@ -41,7 +44,7 @@ public class BasicTutorial8 {
 		
 		data.visual.set("shader", 0);
 		data.visual.set("style", 0);
-		Caps caps = Caps.fromString("audio/x-raw,format=S16LE,channels=2,layout=interleaved, rate=44100");
+		Caps caps = Caps.fromString("audio/x-raw ,format=S16LE, layout=interleaved, rate=44100, channels=1");
 		data.appSource.setCaps(caps);
 		data.appSource.set("format", 3);
 		data.appSource.connect((AppSrc.NEED_DATA)(source,size)->startFeed(source,size,data));
@@ -100,18 +103,20 @@ public class BasicTutorial8 {
 	}
 
 	private static void startFeed(AppSrc source, int size, CustomData data) {
+		System.out.println("start feeding");
 		if(data.sourceid==null) {
-			data.sourceid = new Thread(new PushData(data));
+			data.sourceid = new PushData(data);
 			data.sourceid.start();
 		}else {
-			data.sourceid.resume();
+			data.sourceid.setRunning(true);
 		}
 		
 	}
 	
 	private static void stopFeed(AppSrc source, CustomData data) {
+		System.out.println("stop feeding");
 		if(data.sourceid!=null) {
-			data.sourceid.suspend();
+			data.sourceid.setRunning(false);
 		}
 	}
 
@@ -123,27 +128,36 @@ public class BasicTutorial8 {
 		Element appQueue;
 		int numOfSamples;
 		float a,b,c,d;
-		Thread sourceid;
+		PushData sourceid;
 		
 	}
 	
-	static class PushData implements Runnable {
+	static class PushData extends Thread {
 		private CustomData data;
+		private boolean running;
+		public boolean isRunning() {
+			return running;
+		}
+		public void setRunning(boolean running) {
+			this.running = running;
+		}
 		public PushData(CustomData data) {
 			this.data = data;
+			running = true;
 		}
 		@Override
 		public void run() {
 			while(true) {
+				if(running) {
 				int numberOfSample = CHUNK_SIZE/2;
 				Buffer buffer = new Buffer(CHUNK_SIZE);
-				buffer.setPresentationTimestamp(data.numOfSamples*1000/SAMPLE_RATE);
-				buffer.setDuration(numberOfSample*1000/SAMPLE_RATE);
+				buffer.setPresentationTimestamp(new BigDecimal(data.numOfSamples).multiply(GST_SECOND).divide(SAMPLE_RATE,0,RoundingMode.HALF_UP).longValue());
+				buffer.setDuration(new BigDecimal(numberOfSample).multiply(GST_SECOND).divide(SAMPLE_RATE,0,RoundingMode.HALF_UP).longValue());
 				ByteBuffer map = buffer.map(true);
 				data.c += data.d;
 				data.d -= data.c / 1000;
 				float freq = 1100 + 1000 * data.d;
-				for (int i = 0; i < numberOfSample; i+=2) {
+				for (int i = 0; i < CHUNK_SIZE; i+=2) {
 				    data.a += data.b;
 				    data.b -= data.a / freq;
 				    int raw = (int) (500 * data.a);
@@ -153,6 +167,14 @@ public class BasicTutorial8 {
 				buffer.unmap();
 				data.numOfSamples += numberOfSample;
 				data.appSource.pushBuffer(buffer);
+				}else {
+					try {
+						Thread.sleep(100);
+					} catch (InterruptedException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+				}
 			}
 			
 		}
