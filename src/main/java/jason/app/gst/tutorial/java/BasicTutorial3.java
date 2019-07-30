@@ -11,16 +11,9 @@ import org.freedesktop.gstreamer.PadLinkException;
 import org.freedesktop.gstreamer.Pipeline;
 import org.freedesktop.gstreamer.Structure;
 
-class CustomData {
-	Element pipeline;
-	Element source;
-	Element convert;
-	Element sink;
-}
 public class BasicTutorial3 {
-	private static CustomData data = new CustomData();
 	public static void main(String[] args) {
-		
+		CustomData data = new CustomData();
 		Gst.init();
 		data.source = ElementFactory.make("uridecodebin", "source");
 		data.convert = ElementFactory.make("audioconvert", "convert");
@@ -30,20 +23,18 @@ public class BasicTutorial3 {
 		pipeline.addMany(data.source,data.convert,data.sink);
 		data.convert.link(data.sink);
 		data.source.set("uri", "https://www.freedesktop.org/software/gstreamer-sdk/data/media/sintel_trailer-480p.webm");
-		data.source.connect(padAddedHandler);
+		data.source.connect((Element.PAD_ADDED)(gstObject,newPad)->padAddedHandler(gstObject,newPad,data));
 		Bus bus = pipeline.getBus();
-		bus.connect((Bus.EOS) gstObject -> System.out.println("EOS "+gstObject));
+		bus.connect((Bus.EOS) gstObject -> System.out.println("End-Of-Stream reached. "));
 		bus.connect((Bus.ERROR) (gstObject, i, s) -> System.out.println("ERROR "+i+" "+s+" "+gstObject));
 		bus.connect((Bus.WARNING) (gstObject, i, s) -> System.out.println("WARN "+i+" "+s+" "+gstObject));
+		bus.connect((Bus.STATE_CHANGED) (gstObject, old, current,pending) -> System.out.println(String.format("Pipeline state changed from %s to %s:", old.name(),current.name())));
 		bus.connect((Bus.EOS) obj -> Gst.quit() );
 		pipeline.play();
 		Gst.main();
 	}
 
-	private static PAD_ADDED padAddedHandler = new PAD_ADDED() {
-
-		@Override
-		public void padAdded(Element src, Pad newPad) {
+	private static void padAddedHandler(Element src, Pad newPad,CustomData data) {
 			Pad sinkPad = data.convert.getStaticPad("sink");
 			if(!sinkPad.isLinked()) {
 				Caps newPadCaps = newPad.getCurrentCaps();
@@ -64,6 +55,10 @@ public class BasicTutorial3 {
 			}
 			
 		}
-		
-	};
+	static class CustomData {
+		Element pipeline;
+		Element source;
+		Element convert;
+		Element sink;
+	}
 }
